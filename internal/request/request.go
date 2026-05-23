@@ -42,7 +42,8 @@ func newRequest() *Request {
 func parseRequestLine(b []byte) (*RequestLine, int, error) {
 	idx := bytes.Index(b, SEPARATOR_CRLF)
 	if idx == -1 {
-		return nil, 0, ERROR_INCOMPLETE_DATA
+		return nil, 0, nil
+		// return nil, 0, ERROR_INCOMPLETE_DATA
 	}
 
 	startLine := b[:idx]
