@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"http.protocol/internal/headers"
 )
 
 type RequestLine struct {
@@ -14,15 +16,17 @@ type RequestLine struct {
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     *headers.Headers
 	State       ParseState
 }
 
 type ParseState string
 
 const (
-	StateInit  ParseState = "init"
-	StateDone  ParseState = "done"
-	StateError ParseState = "error"
+	StateInit    ParseState = "init"
+	StateDone    ParseState = "done"
+	StateError   ParseState = "error"
+	StateHeaders ParseState = "headers"
 )
 
 const bufferSize = 1024
@@ -35,7 +39,8 @@ var SEPARATOR_CRLF = []byte("\r\n")
 
 func newRequest() *Request {
 	return &Request{
-		State: StateInit,
+		State:   StateInit,
+		Headers: headers.NewHeaders(),
 	}
 }
 
@@ -75,12 +80,14 @@ func (r *Request) parse(data []byte) (int, error) {
 
 outer:
 	for {
+		currentData := data[read:]
+
 		switch r.State {
 		case StateError:
 			return 0, ERROR_REQUEST_IN_ERROR_STATE
 
 		case StateInit:
-			rl, n, err := parseRequestLine(data[read:])
+			rl, n, err := parseRequestLine(currentData)
 			if err != nil {
 				r.State = StateError
 				return 0, err
@@ -92,12 +99,32 @@ outer:
 			r.RequestLine = *rl
 			read += n
 
-			r.State = StateDone
+			r.State = StateHeaders
+
+		case StateHeaders:
+			n, done, err := r.Headers.Parse(currentData)
+			if err != nil {
+				return 0, err
+			}
+
+			if n == 0 {
+				break outer
+			}
+
+			read += n
+
+			if done {
+				r.State = StateDone
+			}
 
 		case StateDone:
 			break outer
+
+		default:
+			panic("something went wrong in parse function")
 		}
 	}
+
 	return read, nil
 }
 
@@ -127,6 +154,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		copy(buf, buf[readN:bufLen])
 		bufLen -= readN
 	}
+
+	request.RequestLine.Method = string(bytes.ToUpper([]byte(request.RequestLine.Method)))
 
 	return request, nil
 }
