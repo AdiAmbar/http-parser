@@ -59,6 +59,7 @@ func isValidToken(str []byte) bool {
 
 func parseHeaderLine(fieldLine []byte) (string, string, error) {
 	parts := bytes.SplitN(fieldLine, []byte(":"), 2)
+
 	if len(parts) != 2 {
 		return "", "", ERROR_BAD_HEADER_LINE
 	}
@@ -73,6 +74,12 @@ func parseHeaderLine(fieldLine []byte) (string, string, error) {
 	fieldNameLower := strings.ToLower(string(fieldName))
 
 	return fieldNameLower, string(fieldValue), nil
+}
+
+func (h *Headers) ForEach(cb func(name, value string)) {
+	for name, value := range h.headers {
+		cb(name, value)
+	}
 }
 
 func (h *Headers) Parse(data []byte) (int, bool, error) {
