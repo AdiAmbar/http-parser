@@ -10,14 +10,22 @@ import (
 func TestHeadersParse(t *testing.T) {
 	// Test: Valid single header
 	headers := NewHeaders()
-	// data := []byte("Host: localhost:42069\r\n\r\n")
 	data := []byte("Host: localhost:42069\r\nFooFoo:   barbar    \r\n\r\n")
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers.Get("Host"))
-	assert.Equal(t, "barbar", headers.Get("FooFoo"))
-	assert.Equal(t, "", headers.Get("MissingKey"))
+	host, ok := headers.Get("Host")
+	assert.True(t, ok)
+	assert.Equal(t, "localhost:42069", host)
+
+	FooFoo, ok := headers.Get("FooFoo")
+	assert.True(t, ok)
+	assert.Equal(t, "barbar", FooFoo)
+
+	MissingKey, ok := headers.Get("MissingKey")
+	assert.False(t, ok)
+	assert.Equal(t, "", MissingKey)
+
 	assert.Equal(t, 47, n)
 	assert.True(t, done)
 
@@ -42,7 +50,9 @@ func TestHeadersParse(t *testing.T) {
 	data = []byte("Host: localhost:42069\r\nHost: example.com\r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
-	assert.Equal(t, "localhost:42069, example.com", headers.Get("Host"))
+	host2, ok := headers.Get("Host")
+	assert.True(t, ok)
+	assert.Equal(t, "localhost:42069, example.com", host2)
 	// assert.Equal(t, 49, n)
 	assert.True(t, done)
 }

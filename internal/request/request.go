@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 
 	"http.protocol/internal/headers"
 )
@@ -18,6 +19,27 @@ type Request struct {
 	RequestLine RequestLine
 	Headers     *headers.Headers
 	State       ParseState
+	Body        string
+}
+
+func getInt(headers *headers.Headers, fieldName string, defaultValue int) int {
+	valueStr, exist := headers.Get(fieldName)
+
+	if !exist {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+func (r *Request) hasBody() bool {
+	// TODO: Whendoing chuncked coding, this method will need to be updated
+	length := getInt(r.Headers, "content-length", 0)
+	return length > 0
 }
 
 type ParseState string
@@ -27,6 +49,7 @@ const (
 	StateDone    ParseState = "done"
 	StateError   ParseState = "error"
 	StateHeaders ParseState = "headers"
+	StateBody    ParseState = "body"
 )
 
 const bufferSize = 1024
@@ -81,6 +104,9 @@ func (r *Request) parse(data []byte) (int, error) {
 outer:
 	for {
 		currentData := data[read:]
+		if len(currentData) == 0 {
+			break outer
+		}
 
 		switch r.State {
 		case StateError:
@@ -104,6 +130,7 @@ outer:
 		case StateHeaders:
 			n, done, err := r.Headers.Parse(currentData)
 			if err != nil {
+				r.State = StateError
 				return 0, err
 			}
 
@@ -114,6 +141,24 @@ outer:
 			read += n
 
 			if done {
+				if r.hasBody() {
+					r.State = StateBody
+				} else {
+					r.State = StateDone
+				}
+			}
+
+		case StateBody:
+			length := getInt(r.Headers, "content-length", 0)
+			if length == 0 {
+				panic("Chunked not implemented yet")
+			}
+
+			remaining := min(length-len(r.Body), len(currentData))
+			r.Body += string(currentData[:remaining])
+			read += remaining
+
+			if len(r.Body) == length {
 				r.State = StateDone
 			}
 
