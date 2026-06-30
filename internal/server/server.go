@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"http.protocol/internal/response"
 )
 
 type Server struct {
 	Closed bool
 }
 
-func runConnection(s *Server, conn io.ReadWriteCloser) {
+func runConnection(_s *Server, conn io.ReadWriteCloser) {
+	defer conn.Close()
 
-	out := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!")
-	conn.Write(out)
-	conn.Close()
+	headers := response.GetDefaultHeaders(0)
+	response.WriteStatusLine(conn, response.StatusOK)
+	response.WriteHeaders(conn, headers)
 }
 
 func runServer(s *Server, listener net.Listener) {
