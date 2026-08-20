@@ -1,18 +1,30 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	"http.protocol/internal/headers"
 	"http.protocol/internal/request"
 	"http.protocol/internal/response"
 	"http.protocol/internal/server"
 )
 
 const port = 42069
+
+func toStr(bytes []byte) string {
+	out := ""
+	for _, b := range bytes {
+		out += fmt.Sprintf("%02x", b)
+	}
+	return out
+}
 
 func respond400() []byte {
 	return []byte(`<html>
@@ -60,6 +72,44 @@ func main() {
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
 			body = respond500()
 			status = response.StatusInternalServerError
+		} else if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/stream") {
+			target := req.RequestLine.RequestTarget
+
+			res, err := http.Get("https://httpbingo.org/" + target[len("/httpbib/"):])
+			if err != nil {
+				body = respond500()
+				status = response.StatusInternalServerError
+			} else {
+				h.Delete("Content-length")
+				h.Set("transfer-encoding", "chunked")
+				h.Replace("content-type", "text/plain")
+				h.Set("Trailer", "X-Content-SHA256")
+				h.Set("Trailer", "X-Content-Length")
+				w.WriteStatusLine(response.StatusOK)
+				w.WriteHeaders(*h)
+
+				fullBudy := []byte{}
+				for {
+					data := make([]byte, 1024)
+					n, err := res.Body.Read(data)
+					if err != nil {
+						break
+					}
+
+					fullBudy = append(fullBudy, data[:n]...)
+					w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+					w.WriteBody(data[:n])
+					w.WriteBody([]byte("\r\n"))
+				}
+				w.WriteBody([]byte("0\r\n"))
+				trailers := headers.NewHeaders()
+				out := sha256.Sum256(fullBudy)
+				trailers.Set("X-Content-SHA256", toStr(out[:]))
+				trailers.Set("X-Content-Length", fmt.Sprintf("%d", len(fullBudy)))
+				w.WriteHeaders(*trailers)
+
+				return
+			}
 		}
 
 		h.Replace("Content-length", fmt.Sprintf("%d", len(body)))
